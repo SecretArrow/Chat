@@ -4,6 +4,65 @@
 
 ---
 
+## Quick Start: How It Works (Simple Version)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    BROWSER ANDA                              │
+│                                                              │
+│  ┌─────────────┐    ┌──────────────┐    ┌───────────────┐  │
+│  │ Wallet Anda │    │  Enkripsi    │    │  Penyimpanan  │  │
+│  │             │    │  (E2E)       │    │  Lokal        │  │
+│  │ Ed25519 key │───►│ Curve25519   │───►│ IndexedDB     │  │
+│  │ oct... addr │    │ XSalsa20     │    │ (cepat)       │  │
+│  └─────────────┘    └──────────────┘    └───────────────┘  │
+│         │                                        │          │
+│         │           ┌──────────────┐             │          │
+│         └──────────►│  Octra RPC   │◄────────────┘          │
+│                     │  (baca data) │                        │
+│                     └──────┬───────┘                        │
+└────────────────────────────┼────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  JARINGAN OCTRA (devnet)                     │
+│                                                              │
+│  Yang BISA kita baca (gratis):                              │
+│  ✓ Saldo wallet mana pun                                    │
+│  ✓ Riwayat transaksi                                        │
+│  ✓ Stealth outputs (pool pesan terenkripsi publik)          │
+│  ✓ Status jaringan (epoch, validator)                       │
+│                                                              │
+│  Yang BUTUH saldo OCT (berbayar):                           │
+│  ✗ Kirim transaksi (octra_submit)                           │
+│  ✗ Deploy Circle contract                                   │
+│  ✗ Post message ke chain                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Analogi sederhana:**
+- Octra = **bank** dengan brankas publik
+- Wallet Anda = **kunci brankas** (Ed25519 + Curve25519)
+- Enkripsi E2E = **pesan dalam amplop terkunci** (hanya penerima bisa buka)
+- IndexedDB = **tas Anda** (simpan sementara, cepat)
+- Octra chain = **brankas bank** (permanent, multi-device)
+
+**Yang SUDAH pakai Octra nyata:**
+1. ✅ Address derivation: `oct + Base58(SHA256(Ed25519_pub))` — persis sama format Octra
+2. ✅ HD derivation: `HMAC-SHA512("Octra seed", master_seed)[0:32]` — persis Octra v2
+3. ✅ Transaction signing: format `signing_json` dari `tx_builder.hpp` — siap submit
+4. ✅ RPC read: `node_status`, `octra_balance`, `octra_account`, `octra_stealthOutputs`
+5. ✅ Stealth scanning: scan REAL 50 stealth outputs dari devnet on-chain
+6. ✅ Mempool monitoring: 21 pending txs real-time
+7. ✅ Network health: epoch 1,798,991, 55 validator, v3.0.0-irmin
+
+**Yang butuh wallet funded untuk aktif:**
+1. ❌ `octra_submit` — kirim transaksi (butuh OCT untuk fee)
+2. ❌ Deploy Circle contract — butuh ~1-5 OCT
+3. ❌ Post message on-chain — butuh ~0.001 OCT per pesan
+
+---
+
 ## Table of Contents
 
 1. [Octra Network Architecture](#1-octra-network-architecture)
