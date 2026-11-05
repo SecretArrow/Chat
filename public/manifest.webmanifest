@@ -1,0 +1,18 @@
+{
+  "name": "OctraChat",
+  "short_name": "OctraChat",
+  "description": "Encrypted Circle-based messenger for Octra network",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090a12",
+  "theme_color": "#7c5cff",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

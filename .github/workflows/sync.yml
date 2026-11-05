@@ -1,0 +1,54 @@
+name: Sync
+
+# Auto-sync workflow — pulls at the start of each session and pushes at the end.
+# Triggered manually or on a schedule.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'pull or push'
+        required: true
+        default: 'push'
+        type: choice
+        options:
+          - push
+          - pull
+  schedule:
+    # Auto-push every hour (in case of changes)
+    - cron: '0 * * * *'
+
+jobs:
+  sync:
+    name: ${{ github.event.inputs.action || 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Configure Git
+        run: |
+          git config user.name "OctraChat Bot"
+          git config user.email "bot@octrachat.local"
+
+      - name: ${{ github.event.inputs.action || 'push' }}
+        run: |
+          if [ "${{ github.event.inputs.action || 'push' }}" = "pull" ]; then
+            echo "Pulling latest changes..."
+            git pull origin main --no-rebase || true
+          else
+            echo "Pushing current state..."
+            git add -A
+            git diff --staged --quiet && echo "No changes to push" || {
+              git commit -m "Auto-sync: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+              git push origin main
+            }
+          fi

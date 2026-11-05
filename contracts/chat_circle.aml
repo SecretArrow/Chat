@@ -1,0 +1,228 @@
+// ChatCircle.aml — Circle contract for encrypted group chat
+// ------------------------------------------------------------------
+// This contract does NOT perform encryption. Encryption is 100% client-side.
+// The contract provides:
+//   - Membership management (who can post)
+//   - Append-only message log (encrypted ciphertexts)
+//   - Per-recipient wrapped keys (for group E2E)
+//   - Cross-circle transport (for DMs between circles)
+//
+// Compile with: amlc contracts/chat_circle.aml --program -o build/chat_circle.bc
+// Deploy with:  scripts/deploy-circle.ts
+
+program ChatCircle {
+
+  // ─── Membership Policy ──────────────────────────────────────
+  // Anyone with an Octra address can join (open membership).
+  // Only members can post messages.
+  member_policy: open_join
+
+  // ─── Storage Schema ─────────────────────────────────────────
+  storage {
+    // Append-only log of encrypted messages
+    messages: append_log<{
+      id: int,           // sequential message ID
+      author: address,   // sender's Octra address
+      body: bytes,       // ciphertext (secretbox)
+      wraps: map<address, bytes>,  // per-recipient wrapped messageKey
+      ts: float,         // timestamp
+      reply_to: int?     // optional: message ID being replied to
+    }>
+
+    // Member registry
+    members: set<{
+      address: address,
+      curve_pub: bytes,  // Curve25519 public key (cp_... without prefix)
+      joined_at: float,
+      role: string       // "admin" | "member" | "viewer"
+    }>
+
+    // Circle metadata
+    meta: {
+      name: string,
+      description: string,
+      created_at: float,
+      created_by: address,
+      kind: string       // "room" | "group" | "dm"
+    }
+
+    // Message counter
+    next_msg_id: int
+  }
+
+  // ─── Policies ───────────────────────────────────────────────
+  policy {
+    // Only members can write to storage
+    write: require_member
+
+    // Anyone can read (ciphertext is public, only members can decrypt)
+    read: public
+
+    // Storage limit per message: 10 KB (body + wraps)
+    max_message_size: 10240
+
+    // Rate limit: 1 message per 5 seconds per member
+    rate_limit: { window: 5.0, max: 1 }
+  }
+
+  // ─── Methods ────────────────────────────────────────────────
+
+  // Called by deployer to initialize the circle
+  method init(name: string, description: string, kind: string) {
+    require(caller == deployer)
+    storage.meta = {
+      name: name,
+      description: description,
+      created_at: now(),
+      created_by: caller,
+      kind: kind
+    }
+    storage.next_msg_id = 0
+    // Deployer is first member + admin
+    storage.members.add({
+      address: caller,
+      curve_pub: caller_curve_pub,
+      joined_at: now(),
+      role: "admin"
+    })
+  }
+
+  // Anyone can join (open membership)
+  method join(curve_pub: bytes) {
+    require(sig_verify(caller_sig, caller_addr))
+    require(!storage.members.contains(caller_addr))
+    storage.members.add({
+      address: caller_addr,
+      curve_pub: curve_pub,
+      joined_at: now(),
+      role: "member"
+    })
+    emit("member_joined", { address: caller_addr })
+  }
+
+  // Members can leave voluntarily
+  method leave() {
+    require(storage.members.contains(caller_addr))
+    storage.members.remove(caller_addr)
+    emit("member_left", { address: caller_addr })
+  }
+
+  // Post an encrypted message
+  method post_message(
+    body: bytes,                    // secretbox ciphertext
+    wraps: map<address, bytes>,     // per-recipient wrapped messageKey
+    reply_to: int?                  // optional reply target
+  ) {
+    require(storage.members.contains(caller_addr))
+    require(body.length <= 8192)    // 8 KB max body
+    require(len(wraps) <= 100)      // max 100 recipients per message
+    require(rate_limit_check(caller_addr))
+
+    let id = storage.next_msg_id
+    storage.next_msg_id = id + 1
+
+    storage.messages.append({
+      id: id,
+      author: caller_addr,
+      body: body,
+      wraps: wraps,
+      ts: now(),
+      reply_to: reply_to
+    })
+
+    emit("message_posted", { id: id, author: caller_addr })
+  }
+
+  // Admin can promote/demote members
+  method set_role(member: address, role: string) {
+    require(is_admin(caller_addr))
+    require(storage.members.contains(member))
+    require(role == "admin" || role == "member" || role == "viewer")
+    storage.members.update(member, { role: role })
+    emit("role_changed", { member: member, role: role })
+  }
+
+  // Admin can kick members
+  method kick(member: address) {
+    require(is_admin(caller_addr))
+    require(storage.members.contains(member))
+    require(member != caller_addr)  // can't kick yourself
+    storage.members.remove(member)
+    emit("member_kicked", { member: member })
+  }
+
+  // ─── View Methods (read-only, free) ─────────────────────────
+
+  // Get messages since a given ID (for pagination)
+  view method get_messages(since_id: int, limit: int) {
+    let msgs = storage.messages.range(since_id, storage.next_msg_id)
+    return take(msgs, limit)  // first `limit` messages
+  }
+
+  // Get all messages (dump)
+  view method get_all_messages() {
+    return storage.messages.all()
+  }
+
+  // Get member list
+  view method get_members() {
+    return storage.members.all()
+  }
+
+  // Get circle metadata
+  view method get_info() {
+    return storage.meta
+  }
+
+  // Get message count
+  view method get_count() {
+    return storage.next_msg_id
+  }
+
+  // ─── Transport (cross-circle DMs) ───────────────────────────
+
+  // Send a message to another circle (via transport)
+  method transport_send(
+    target_circle: address,
+    body: bytes,
+    wraps: map<address, bytes>
+  ) {
+    require(storage.members.contains(caller_addr))
+    outbox.send({
+      target: target_circle,
+      payload: { body: body, wraps: wraps, from: caller_addr },
+      ts: now()
+    })
+  }
+
+  // Receive a transport message from another circle
+  method transport_receive(payload: bytes) {
+    // Called by the transport system when a message arrives
+    let data = decode(payload)
+    storage.messages.append({
+      id: storage.next_msg_id,
+      author: data.from,
+      body: data.body,
+      wraps: data.wraps,
+      ts: now(),
+      reply_to: null
+    })
+    storage.next_msg_id = storage.next_msg_id + 1
+  }
+
+  // ─── Helpers ────────────────────────────────────────────────
+
+  helper is_admin(addr: address) {
+    let m = storage.members.get(addr)
+    return m != null && m.role == "admin"
+  }
+
+  helper require_member() {
+    require(storage.members.contains(caller_addr))
+  }
+
+  helper rate_limit_check(addr: address) {
+    let recent = storage.messages.filter(|m| m.author == addr && now() - m.ts < 5.0)
+    return len(recent) < 1
+  }
+}

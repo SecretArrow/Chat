@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark *));
+
+:root {
+  --bg: 250 250 252;
+  --surface: 255 255 255;
+  --surface-2: 244 245 249;
+  --border: 226 229 237;
+  --border-strong: 200 205 218;
+  --text: 17 24 39;
+  --text-muted: 90 100 122;
+  --text-faint: 140 150 168;
+  --accent: 124 92 255;
+  --accent-fg: 255 255 255;
+  --accent-soft: 234 230 255;
+  --success: 16 185 129;
+  --danger: 244 63 94;
+  --warning: 245 158 11;
+  --bubble-me: 124 92 255;
+  --bubble-me-fg: 255 255 255;
+  --bubble-them: 244 245 249;
+  --bubble-them-fg: 17 24 39;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --radius: 0.75rem;
+}
+
+.dark {
+  --bg: 9 10 18;
+  --surface: 17 18 30;
+  --surface-2: 26 28 44;
+  --border: 38 41 60;
+  --border-strong: 56 60 84;
+  --text: 237 239 245;
+  --text-muted: 156 163 184;
+  --text-faint: 110 117 142;
+  --accent: 139 122 255;
+  --accent-fg: 17 18 30;
+  --accent-soft: 40 36 70;
+  --success: 52 211 153;
+  --danger: 251 113 133;
+  --warning: 251 191 36;
+  --bubble-me: 139 122 255;
+  --bubble-me-fg: 17 18 30;
+  --bubble-them: 26 28 44;
+  --bubble-them-fg: 237 239 245;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+@theme inline {
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surface-2: rgb(var(--surface-2));
+  --color-border: rgb(var(--border));
+  --color-border-strong: rgb(var(--border-strong));
+  --color-text: rgb(var(--text));
+  --color-text-muted: rgb(var(--text-muted));
+  --color-text-faint: rgb(var(--text-faint));
+  --color-accent: rgb(var(--accent));
+  --color-accent-fg: rgb(var(--accent-fg));
+  --color-accent-soft: rgb(var(--accent-soft));
+  --color-success: rgb(var(--success));
+  --color-danger: rgb(var(--danger));
+  --color-warning: rgb(var(--warning));
+  --color-bubble-me: rgb(var(--bubble-me));
+  --color-bubble-me-fg: rgb(var(--bubble-me-fg));
+  --color-bubble-them: rgb(var(--bubble-them));
+  --color-bubble-them-fg: rgb(var(--bubble-them-fg));
+  --radius-card: var(--radius);
+  --font-sans: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.25);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border-strong));
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--text-faint));
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: rgb(var(--surface) / 0.65);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgb(var(--border) / 0.6);
+}
+
+.glass-strong {
+  background: rgb(var(--surface) / 0.85);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+}
+
+/* Subtle gradient mesh for hero */
+.mesh-bg {
+  background-image:
+    radial-gradient(at 20% 10%, rgb(var(--accent) / 0.18) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgb(var(--success) / 0.12) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgb(var(--accent) / 0.10) 0px, transparent 50%);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgb(var(--border) / 0.5), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
