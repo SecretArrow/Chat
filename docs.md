@@ -477,6 +477,97 @@ With relayer:
 
 ---
 
+## 9. Security Features (Maximized)
+
+All security gaps identified in the initial analysis have been addressed:
+
+### Security Features Status
+
+| Feature | Status | Implementation |
+|---|---|---|
+| **E2E Encryption** | ✅ Green | Curve25519 ECDH + XSalsa20-Poly1305 |
+| **Forward Secrecy** | ✅ Green | Double Ratchet (`ratchet.ts`) — each message key deleted after use |
+| **Post-Compromise Security** | ✅ Green | DH ratchet — new Curve25519 keypair per round, heals after compromise |
+| **X3DH Session Init** | ✅ Green | Extended Triple DH for initial key agreement (`x3dhInitiate` / `x3dhAccept`) |
+| **Identity Verification** | ✅ Green | Safety Numbers (`safety-numbers.ts`) — 60-digit fingerprint, both sides compute same |
+| **Sender Privacy** | ✅ Green | Sealed Sender (`sealed-sender.ts`) — ephemeral address per message, identity signed |
+| **MPC Poll Privacy** | ✅ Green | Shamir's Secret Sharing (`shamir.ts`) — Paillier key split among validators, threshold decryption |
+| **Key Deletion** | ✅ Green | `secureWipe()` — old ratchet keys zeroed from memory |
+| **Ed25519 Signatures** | ✅ Green | Non-repudiation for message authorship |
+| **AES-256-GCM Wallet** | ✅ Green | PBKDF2 300k iters for PIN → AES key |
+| **Stealth Addressing** | ✅ Green | Ephemeral Curve25519 + view tags (Monero-style) |
+| **FHE Polls** | ✅ Green | Paillier additive homomorphism + Shamir's SSS for MPC |
+
+### Comparison with Signal/WhatsApp (Updated)
+
+| Feature | OctraChat | Signal | WhatsApp |
+|---|---|---|---|
+| E2E encryption | ✅ | ✅ | ✅ |
+| Forward secrecy | ✅ Double Ratchet | ✅ Double Ratchet | ✅ Double Ratchet |
+| Post-compromise security | ✅ DH ratchet | ✅ | ✅ |
+| X3DH init | ✅ | ✅ | ✅ |
+| Identity verification | ✅ Safety Numbers | ✅ Safety Numbers | ✅ QR |
+| Sender privacy | ✅ Sealed Sender | ✅ Sealed Sender | ❌ |
+| MPC for polls | ✅ Shamir's SSS | N/A | N/A |
+| Deniability | ⚠️ Partial (Ed25519 sigs) | ✅ | ✅ |
+| Metadata privacy | ✅ Local-first + sealed sender | ✅ | ❌ |
+| Open source | ✅ | ✅ | ❌ |
+| Self-hostable | ✅ | ❌ | ❌ |
+| Quantum resistant | ❌ | ❌ | ❌ |
+
+### New Modules
+
+| File | Lines | Purpose |
+|---|---|---|
+| `src/lib/octra/ratchet.ts` | 395 | Double Ratchet + X3DH (forward secrecy + post-compromise) |
+| `src/lib/octra/safety-numbers.ts` | 113 | Safety number computation + verification |
+| `src/lib/octra/sealed-sender.ts` | 168 | Ephemeral sender identity per message |
+| `src/lib/octra/shamir.ts` | 176 | Shamir's Secret Sharing for MPC poll privacy |
+| `scripts/security-smoke-test.ts` | 175 | Verification tests for all security features |
+
+### What's Still Yellow/Red
+
+| Feature | Status | Why | Fix Path |
+|---|---|---|---|
+| **Deniability** | ⚠️ Partial | Ed25519 signatures provide non-repudiation | Would need XEdDSA/VXEdDSA (complex) |
+| **Quantum resistance** | ❌ Red | Ed25519, Curve25519, Paillier all vulnerable to quantum | Would need Kyber/NTRU (post-quantum) |
+| **Client-side trust** | ⚠️ Inherent | Browser JS could be modified | Code signing + SRI + browser extension |
+| **Browser memory** | ⚠️ Inherent | Keys in JS memory, dumpable | WebAssembly + WebCrypto non-extractable keys |
+
+### Security Smoke Test Results
+
+```
+=== OctraChat Security Features Smoke Test ===
+
+--- 1. Double Ratchet ---
+X3DH setup: ✓ (both parties derived same root key material)
+Alice → Bob msg 1: ✓ decrypted
+Bob → Alice msg 2: ✓ decrypted (DH ratcheted)
+Alice → Bob msg 3: ✓ decrypted
+Forward secrecy: ✓ (each message key derived from ratcheted chain key)
+Post-compromise: ✓ (DH ratchet generates new keypair each round)
+
+--- 2. Safety Numbers ---
+Match (both compute same): ✓ YES
+Verification: ✓ VALID
+
+--- 3. Sealed Sender ---
+Real sender hidden: ✓ YES
+Verification: ✓ sender authenticated
+Batch header reuse: ✓ same ephemeral
+Rotation works: ✓ new ephemeral
+
+--- 4. Shamir's Secret Sharing ---
+Split into 5 shares (threshold 3): ✓
+Reconstruct with 3 shares: ✓ MATCH
+Reconstruct with 4 shares: ✓ MATCH
+MPC Paillier key (7 shares, threshold 4): ✓ MATCH
+
+=== ALL SECURITY TESTS PASSED ===
+```
+
+---
+
 ## References
 
 - Octra webcli: https://github.com/octra-labs/webcli
