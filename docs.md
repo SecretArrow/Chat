@@ -6,60 +6,75 @@
 
 ## Quick Start: How It Works (Simple Version)
 
+### Arsitektur Pass-Through (TIDAK simpan di chain)
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    BROWSER ANDA                              │
-│                                                              │
-│  ┌─────────────┐    ┌──────────────┐    ┌───────────────┐  │
-│  │ Wallet Anda │    │  Enkripsi    │    │  Penyimpanan  │  │
-│  │             │    │  (E2E)       │    │  Lokal        │  │
-│  │ Ed25519 key │───►│ Curve25519   │───►│ IndexedDB     │  │
-│  │ oct... addr │    │ XSalsa20     │    │ (cepat)       │  │
-│  └─────────────┘    └──────────────┘    └───────────────┘  │
-│         │                                        │          │
-│         │           ┌──────────────┐             │          │
-│         └──────────►│  Octra RPC   │◄────────────┘          │
-│                     │  (baca data) │                        │
-│                     └──────┬───────┘                        │
-└────────────────────────────┼────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  JARINGAN OCTRA (devnet)                     │
-│                                                              │
-│  Yang BISA kita baca (gratis):                              │
-│  ✓ Saldo wallet mana pun                                    │
-│  ✓ Riwayat transaksi                                        │
-│  ✓ Stealth outputs (pool pesan terenkripsi publik)          │
-│  ✓ Status jaringan (epoch, validator)                       │
-│                                                              │
-│  Yang BUTUH saldo OCT (berbayar):                           │
-│  ✗ Kirim transaksi (octra_submit)                           │
-│  ✗ Deploy Circle contract                                   │
-│  ✗ Post message ke chain                                    │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    BROWSER ALICE                                 │
+│                                                                  │
+│  1. Ketik "Halo"                                                 │
+│  2. Encrypt dengan kunci Bob (Curve25519 ECDH)                  │
+│  3. Kirim ciphertext ke relay (WebSocket)                       │
+│  4. Simpan di IndexedDB lokal (untuk history sendiri)           │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ WebSocket (encrypted)
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  RELAY SERVER (Node.js)                          │
+│                                                                  │
+│  • Terima ciphertext dari Alice                                  │
+│  • Cek apakah Bob online:                                        │
+│    - ONLINE  → forward langsung ke Bob, HAPUS dari relay        │
+│    - OFFLINE → simpan sementara (max 24h), hapus setelah kirim  │
+│  • Relay TIDAK BISA baca pesan (hanya lihat ciphertext)         │
+│  • TIDAK ADA penyimpanan permanent                              │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ WebSocket (forward ciphertext)
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    BROWSER BOB                                   │
+│                                                                  │
+│  1. Terima ciphertext dari relay                                 │
+│  2. Decrypt dengan kunci Bob (Curve25519 ECDH)                  │
+│  3. Tampilkan "Halo" di UI                                      │
+│  4. Simpan di IndexedDB lokal (untuk history sendiri)           │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-**Analogi sederhana:**
-- Octra = **bank** dengan brankas publik
-- Wallet Anda = **kunci brankas** (Ed25519 + Curve25519)
-- Enkripsi E2E = **pesan dalam amplop terkunci** (hanya penerima bisa buka)
-- IndexedDB = **tas Anda** (simpan sementara, cepat)
-- Octra chain = **brankas bank** (permanent, multi-device)
+### Kenapa TIDAK simpan di chain?
 
-**Yang SUDAH pakai Octra nyata:**
-1. ✅ Address derivation: `oct + Base58(SHA256(Ed25519_pub))` — persis sama format Octra
-2. ✅ HD derivation: `HMAC-SHA512("Octra seed", master_seed)[0:32]` — persis Octra v2
-3. ✅ Transaction signing: format `signing_json` dari `tx_builder.hpp` — siap submit
-4. ✅ RPC read: `node_status`, `octra_balance`, `octra_account`, `octra_stealthOutputs`
-5. ✅ Stealth scanning: scan REAL 50 stealth outputs dari devnet on-chain
-6. ✅ Mempool monitoring: 21 pending txs real-time
-7. ✅ Network health: epoch 1,798,991, 55 validator, v3.0.0-irmin
+| Masalah kalau simpan di chain | Solusi pass-through |
+|---|---|
+| Ciphertext permanent selamanya | Pesan dihapus setelah delivery |
+| Kalau crypto pecah → semua pesan terekspos | Tidak ada ciphertext permanent |
+| Metadata bocor (siapa chat dengan siapa) | Relay hanya lihat address, bukan konten |
+| Butuh OCT per pesan (berbayar) | Gratis (relay gratis) |
+| Observer bisa lihat pola komunikasi | Hanya relay yang lihat, bukan publik |
 
-**Yang butuh wallet funded untuk aktif:**
-1. ❌ `octra_submit` — kirim transaksi (butuh OCT untuk fee)
-2. ❌ Deploy Circle contract — butuh ~1-5 OCT
-3. ❌ Post message on-chain — butuh ~0.001 OCT per pesan
+### Octra dipakai untuk APA?
+
+Octra TIDAK dipakai untuk menyimpan pesan. Octra dipakai untuk:
+
+1. **Identity** — wallet address sebagai user ID (`oct...`)
+2. **Key derivation** — Ed25519 + Curve25519 keys dari mnemonic
+3. **Optional: Discovery** — stealth output untuk cari peer secara anonim
+4. **Optional: Circle registry** — daftar anggota group (tanpa isi pesan)
+
+```
+Octra chain: hanya identity + optional group registry
+Relay: pass-through pesan (ephemeral)
+IndexedDB: history lokal (user-controlled, bisa dihapus)
+```
+
+### Keamanan data TERJAGA karena:
+
+1. **✅ Tidak ada ciphertext di chain** — pesan tidak permanent
+2. **✅ Relay tidak bisa baca** — hanya lihat ciphertext terenkripsi
+3. **✅ Forward secrecy** — Double Ratchet, key berubah per pesan, old keys dihapus
+4. **✅ Post-compromise** — DH ratchet, session "sembuh" setelah compromise
+5. **✅ User-controlled** — pesan hanya di IndexedDB, user bisa hapus kapan saja
+6. **✅ Ephemeral relay** — pending messages auto-hapus dalam 24 jam
+7. **✅ E2E encrypted** — hanya sender + receiver punya kunci
 
 ---
 
